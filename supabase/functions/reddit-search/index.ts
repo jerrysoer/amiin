@@ -43,45 +43,31 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await supabase
       .rpc('search_reddit_posts', { query: sanitized })
 
-    if (error) {
-      // Fallback: ilike on both extracted_name and title
-      const { data: fallbackData, error: fallbackError } = await supabase
+    let posts = (data || []).map((row: { title: string; url: string; score: number; created_utc: number }) => ({
+      title: row.title,
+      url: row.url,
+      score: row.score,
+      created: row.created_utc,
+    }))
+
+    // If RPC failed or returned no results, fallback to title search
+    if (error || posts.length === 0) {
+      const { data: fallbackData } = await supabase
         .from('reddit_posts')
         .select('title, url, score, created_utc')
         .or(`extracted_name.ilike.%${sanitized}%,title.ilike.%${sanitized}%`)
         .order('score', { ascending: false })
         .limit(10)
 
-      if (fallbackError) {
-        return new Response(
-          JSON.stringify({ posts: [], searched: true, error: fallbackError.message }),
-          {
-            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-          }
-        )
+      if (fallbackData && fallbackData.length > 0) {
+        posts = fallbackData.map((row: { title: string; url: string; score: number; created_utc: number }) => ({
+          title: row.title,
+          url: row.url,
+          score: row.score,
+          created: row.created_utc,
+        }))
       }
-
-      const posts = (fallbackData || []).map((row: { title: string; url: string; score: number; created_utc: number }) => ({
-        title: row.title,
-        url: row.url,
-        score: row.score,
-        created: row.created_utc,
-      }))
-
-      return new Response(
-        JSON.stringify({ posts, searched: true }),
-        {
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        }
-      )
     }
-
-    const posts = (data || []).map((row: { title: string; url: string; score: number; created_utc: number }) => ({
-      title: row.title,
-      url: row.url,
-      score: row.score,
-      created: row.created_utc,
-    }))
 
     return new Response(
       JSON.stringify({ posts, searched: true }),
