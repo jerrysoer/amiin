@@ -1,14 +1,22 @@
 /**
- * Local sync script — fetches Reddit posts and inserts into Supabase.
- * Run from your machine since Reddit/PullPush block cloud IPs.
+ * Local sync script — fetches Reddit posts, inserts into Supabase, and
+ * runs OCR on images to extract LinkedIn names.
  *
- * Usage: npx tsx scripts/local-sync.ts
+ * Usage:
+ *   npx tsx scripts/local-sync.ts              # full sync + OCR
+ *   npx tsx scripts/local-sync.ts --ocr-only   # skip fetch, just OCR existing posts
+ *
+ * Env vars:
+ *   SUPABASE_SERVICE_KEY  — Supabase service role JWT
+ *   ANTHROPIC_API_KEY     — For Claude Vision OCR
  */
 
 const SUPABASE_URL = 'https://bnpdkhivrgtdayxqzihv.supabase.co'
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || ''
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || ''
 const SUPABASE_KEY = SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
+const OCR_BATCH_SIZE = 100
 
 interface RedditPost {
   id: string
@@ -94,15 +102,141 @@ async function supabaseUpsert(rows: Record<string, unknown>[]) {
   return res
 }
 
-async function main() {
-  if (!SUPABASE_KEY) {
-    console.error('Set SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY env var')
-    process.exit(1)
+async function supabaseUpdate(id: string, fields: Record<string, unknown>) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/reddit_posts?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+    },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Supabase update ${res.status}: ${text}`)
+  }
+}
+
+async function fetchUnOcrdPosts(): Promise<{ id: string; image_url: string }[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/reddit_posts?image_url=not.is.null&extracted_name=is.null&order=score.desc&limit=${OCR_BATCH_SIZE}&select=id,image_url`,
+    {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
+    }
+  )
+  if (!res.ok) throw new Error(`Fetch un-OCRd: ${res.status}`)
+  return res.json()
+}
+
+async function extractNameFromImage(imageUrl: string): Promise<{ name: string | null; headline: string | null }> {
+  // Fetch image
+  const imgRes = await fetch(imageUrl)
+  if (!imgRes.ok) return { name: null, headline: null }
+
+  const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
+  const buffer = await imgRes.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+
+  if (bytes.length > 5 * 1024 * 1024) return { name: null, headline: null }
+
+  const base64 = Buffer.from(bytes).toString('base64')
+  const mediaType = contentType.split(';')[0].trim()
+
+  // Call Claude Vision
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 200,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: mediaType, data: base64 },
+          },
+          {
+            type: 'text',
+            text: 'Look at this screenshot from LinkedIn. Extract:\n1. The person\'s full name (the main person being discussed/shown)\n2. Their LinkedIn headline (the text below their name)\n\nReturn ONLY valid JSON: {"name": "...", "headline": "..."}\nIf you can\'t find a name, return {"name": null, "headline": null}',
+          },
+        ],
+      }],
+    }),
+  })
+
+  if (!res.ok) {
+    console.error(`  Claude API ${res.status}: ${await res.text()}`)
+    return { name: null, headline: null }
   }
 
+  const data = await res.json()
+  const text = data?.content?.[0]?.text || ''
+
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { name: null, headline: null }
+    const parsed = JSON.parse(jsonMatch[0])
+    return { name: parsed.name || null, headline: parsed.headline || null }
+  } catch {
+    return { name: null, headline: null }
+  }
+}
+
+async function runOcr() {
+  if (!ANTHROPIC_API_KEY) {
+    console.log('Skipping OCR — ANTHROPIC_API_KEY not set')
+    return
+  }
+
+  console.log('\nRunning OCR on images without extracted names...')
+  const posts = await fetchUnOcrdPosts()
+  console.log(`  Found ${posts.length} posts needing OCR`)
+
+  let extracted = 0
+  let failed = 0
+
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i]
+    process.stdout.write(`\r  Processing ${i + 1}/${posts.length}...`)
+
+    try {
+      const result = await extractNameFromImage(post.image_url)
+
+      if (result.name) {
+        await supabaseUpdate(post.id, {
+          extracted_name: result.name,
+          extracted_headline: result.headline,
+        })
+        extracted++
+      } else {
+        // Mark as processed (empty string) so we don't retry
+        await supabaseUpdate(post.id, { extracted_name: '' })
+        failed++
+      }
+    } catch (err) {
+      console.error(`\n  Error on ${post.id}: ${err}`)
+      failed++
+    }
+
+    // Rate limit: 500ms between calls
+    await new Promise(r => setTimeout(r, 500))
+  }
+
+  console.log(`\n  OCR complete: ${extracted} names extracted, ${failed} no name found`)
+}
+
+async function syncPosts() {
   let allPosts: RedditPost[] = []
 
-  // Fetch from Reddit API with pagination
   console.log('Fetching from Reddit API...')
   try {
     let after: string | null = null
@@ -112,18 +246,16 @@ async function main() {
       console.log(`  Page ${page + 1}: ${result.posts.length} posts (total: ${allPosts.length})`)
       after = result.after
       if (!after) break
-      await new Promise(r => setTimeout(r, 1200)) // Rate limit
+      await new Promise(r => setTimeout(r, 1200))
     }
   } catch (err) {
     console.log(`Reddit API failed: ${err}`)
   }
 
-  // Also fetch from PullPush for historical coverage
   console.log('Fetching from PullPush...')
   try {
     const ppPosts = await fetchPullPush()
     console.log(`  PullPush: ${ppPosts.length} posts`)
-    // Deduplicate by ID
     const existingIds = new Set(allPosts.map(p => p.id))
     const newPosts = ppPosts.filter(p => !existingIds.has(p.id))
     allPosts.push(...newPosts)
@@ -137,7 +269,6 @@ async function main() {
     return
   }
 
-  // Upsert in batches
   console.log(`\nUpserting ${allPosts.length} posts to Supabase...`)
   let upserted = 0
   for (let i = 0; i < allPosts.length; i += 50) {
@@ -157,7 +288,22 @@ async function main() {
     process.stdout.write(`\r  Upserted: ${upserted}/${allPosts.length}`)
   }
 
-  console.log(`\nDone! ${upserted} posts synced.`)
+  console.log(`\nSync done! ${upserted} posts.`)
+}
+
+async function main() {
+  if (!SUPABASE_KEY) {
+    console.error('Set SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY env var')
+    process.exit(1)
+  }
+
+  const ocrOnly = process.argv.includes('--ocr-only')
+
+  if (!ocrOnly) {
+    await syncPosts()
+  }
+
+  await runOcr()
 }
 
 main().catch(console.error)
