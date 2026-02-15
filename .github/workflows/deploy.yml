@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_SUPABASE_FUNCTION_URL: https://bnpdkhivrgtdayxqzihv.supabase.co/functions/v1/reddit-search
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
