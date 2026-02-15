@@ -41,7 +41,7 @@ export default function ShareButtons({ cardRef, name, score }: ShareButtonsProps
   const handleCopyShareText = async () => {
     const redditFound = score.redditResult.posts.length > 0
 
-    const url = 'https://jsmacair.github.io/amiin/'
+    const url = 'https://jerrysoer.github.io/amiin/'
     const text = redditFound
       ? `I scored ${score.totalScore} on the LinkedIn Lunatic test and I'm ACTUALLY ON r/LinkedInLunatics 💀\n\nI'm a "${score.tier.name}" class "${score.lunaticClass}"\n\nFind out your score: ${url}`
       : `I scored ${score.totalScore} on the LinkedIn Lunatic test — I'm a "${score.tier.name}" class "${score.lunaticClass}" ${score.classEmoji}\n\nAt least I'm not on r/LinkedInLunatics... yet.\n\nFind out your score: ${url}`

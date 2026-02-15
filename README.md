@@ -2,7 +2,7 @@
 
 Score your LinkedIn cringe level, get a shareable trading card, and find out if r/LinkedInLunatics has noticed you.
 
-**Live:** [jsmacair.github.io/amiin](https://jsmacair.github.io/amiin/)
+**Live:** [jerrysoer.github.io/amiin](https://jerrysoer.github.io/amiin/)
 
 ## How It Works
 

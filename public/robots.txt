@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jsmacair.github.io/amiin/sitemap.xml
+Sitemap: https://jerrysoer.github.io/amiin/sitemap.xml
 
 # AI-friendly crawling
 User-agent: GPTBot
