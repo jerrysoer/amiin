@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jsmacair.github.io/amiin/sitemap.xml
+
+# AI-friendly crawling
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Anthropic-AI
+Allow: /
