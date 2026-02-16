@@ -9,6 +9,19 @@ const CORS_HEADERS = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+// Check if two first names are compatible:
+// - Exact match ("Ken" = "Ken")
+// - One is a short form of the other ("Chris" → "Christopher")
+//   Requires the shorter to be a prefix AND the longer to be 3+ chars longer
+//   (prevents "Ken" matching "Kent" but allows "Chris" matching "Christopher")
+function firstNameMatches(a: string, b: string): boolean {
+  const la = a.toLowerCase()
+  const lb = b.toLowerCase()
+  if (la === lb) return true
+  const [shorter, longer] = la.length <= lb.length ? [la, lb] : [lb, la]
+  return longer.startsWith(shorter) && (longer.length - shorter.length) >= 3
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
@@ -35,27 +48,45 @@ Deno.serve(async (req: Request) => {
   }
 
   const sanitized = name.trim().replace(/[^\w\s.-]/g, '')
+  const queryParts = sanitized.toLowerCase().split(/\s+/)
+  const queryFirst = queryParts[0]
+  const queryLast = queryParts[queryParts.length - 1]
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Fuzzy search on extracted_name using pg_trgm similarity
-    const { data, error } = await supabase
-      .rpc('search_reddit_posts', { query: sanitized })
+    // Search by last name in extracted_name (indexed via trigram)
+    const { data } = await supabase
+      .from('reddit_posts')
+      .select('title, url, score, created_utc, extracted_name')
+      .not('extracted_name', 'is', null)
+      .neq('extracted_name', '')
+      .ilike('extracted_name', `%${queryLast}%`)
+      .order('score', { ascending: false })
+      .limit(50)
 
-    let posts = (data || []).map((row: { title: string; url: string; score: number; created_utc: number }) => ({
-      title: row.title,
-      url: row.url,
-      score: row.score,
-      created: row.created_utc,
-    }))
+    // Filter: exact last name + compatible first name
+    let posts = (data || [])
+      .filter((row: { extracted_name: string }) => {
+        const parts = row.extracted_name.trim().toLowerCase().split(/\s+/)
+        const extractedFirst = parts[0]
+        const extractedLast = parts[parts.length - 1]
+        return extractedLast === queryLast && firstNameMatches(queryFirst, extractedFirst)
+      })
+      .slice(0, 10)
+      .map((row: { title: string; url: string; score: number; created_utc: number }) => ({
+        title: row.title,
+        url: row.url,
+        score: row.score,
+        created: row.created_utc,
+      }))
 
-    // If RPC failed or returned no results, fallback to title search
-    if (error || posts.length === 0) {
+    // Fallback: search title for full name (handles cases where OCR missed)
+    if (posts.length === 0) {
       const { data: fallbackData } = await supabase
         .from('reddit_posts')
         .select('title, url, score, created_utc')
-        .or(`extracted_name.ilike.%${sanitized}%,title.ilike.%${sanitized}%`)
+        .ilike('title', `%${sanitized}%`)
         .order('score', { ascending: false })
         .limit(10)
 

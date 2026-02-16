@@ -355,6 +355,7 @@ async function syncPosts() {
   let before: number | undefined = undefined
   let pullpushTotal = 0
   let retries = 0
+  let stalePages = 0
 
   while (allPosts.length < PULLPUSH_TARGET) {
     try {
@@ -374,6 +375,17 @@ async function syncPosts() {
       newPosts.forEach(p => existingIds.add(p.id))
       allPosts.push(...newPosts)
       pullpushTotal += newPosts.length
+
+      // Detect stale pages (no new unique posts — we've reached the bottom)
+      if (newPosts.length === 0) {
+        stalePages++
+        if (stalePages >= 3) {
+          console.log('\n  PullPush: 3 consecutive stale pages — reached bottom of subreddit.')
+          break
+        }
+      } else {
+        stalePages = 0
+      }
 
       const oldestDate = new Date(oldestInBatch * 1000).toISOString().split('T')[0]
       process.stdout.write(`\r  PullPush: ${pullpushTotal} new posts (total: ${allPosts.length}, oldest: ${oldestDate})`)
