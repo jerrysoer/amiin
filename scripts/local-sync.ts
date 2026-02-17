@@ -43,7 +43,7 @@ async function fetchRedditPage(after?: string): Promise<{ posts: RedditPost[]; a
 
   const url = `https://www.reddit.com/r/LinkedInLunatics/new.json?${params}`
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'AmIIn-LocalSync/1.0' },
+    headers: { 'User-Agent': 'LinkedinLunatics-LocalSync/1.0' },
   })
 
   if (!response.ok) throw new Error(`Reddit ${response.status}`)

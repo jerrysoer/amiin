@@ -194,7 +194,7 @@ export default function ResultsPage({ name, headline, score, onReset, onLeaderbo
           <button
             onClick={() => {
               const text = encodeURIComponent(
-                `I just scored ${score.totalScore} on the LinkedIn Lunatic test. Find out your score: https://jerrysoer.github.io/amiin/`
+                `I just scored ${score.totalScore} on the LinkedIn Lunatic test. Find out your score: https://jerrysoer.github.io/LinkedinLunatics/`
               )
               window.open(
                 `https://twitter.com/intent/tweet?text=${text}`,

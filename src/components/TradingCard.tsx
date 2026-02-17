@@ -162,7 +162,7 @@ export default function TradingCard({ name, headline, score }: TradingCardProps)
             color: tier.colors.text,
           }}
         >
-          amiin.app
+          LinkedinLunatics
         </div>
       </div>
     </div>

@@ -1384,7 +1384,7 @@ const SENSITIVE_PATTERNS = [
 const UNDO_STACK_SIZE = 20;
 const INSIGHTS_THRESHOLD = 100;
 const BULK_CONCURRENCY = 5;
-const STORAGE_KEY = 'amiin-review-state';
+const STORAGE_KEY = 'linkedinlunatics-review-state';
 
 // ═══════════════════════════════════════════════
 //  STATE
@@ -1463,10 +1463,10 @@ function toggleRemember() {
 //  AUTH
 // ═══════════════════════════════════════════════
 (function initAuth() {
-  const stored = localStorage.getItem('amiin-review-key') || sessionStorage.getItem('amiin-review-key');
+  const stored = localStorage.getItem('linkedinlunatics-review-key') || sessionStorage.getItem('linkedinlunatics-review-key');
   if (stored) {
     $('input-key').value = stored;
-    if (localStorage.getItem('amiin-review-key')) {
+    if (localStorage.getItem('linkedinlunatics-review-key')) {
       $('input-remember').checked = true;
       $('checkbox-visual').classList.add('checked');
     }
@@ -1495,11 +1495,11 @@ async function handleConnect() {
     supabaseKey = key;
 
     if ($('input-remember').checked) {
-      localStorage.setItem('amiin-review-key', key);
-      sessionStorage.removeItem('amiin-review-key');
+      localStorage.setItem('linkedinlunatics-review-key', key);
+      sessionStorage.removeItem('linkedinlunatics-review-key');
     } else {
-      sessionStorage.setItem('amiin-review-key', key);
-      localStorage.removeItem('amiin-review-key');
+      sessionStorage.setItem('linkedinlunatics-review-key', key);
+      localStorage.removeItem('linkedinlunatics-review-key');
     }
 
     startLoading();

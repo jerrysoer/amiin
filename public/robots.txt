@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jerrysoer.github.io/amiin/sitemap.xml
+Sitemap: https://jerrysoer.github.io/LinkedinLunatics/sitemap.xml
 
 # AI-friendly crawling
 User-agent: GPTBot
