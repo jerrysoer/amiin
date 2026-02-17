@@ -1,0 +1,2054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content Review // Moderation Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ── Design Tokens ── */
+  :root {
+    --surface: #06060c;
+    --surface-raised: #0e0e1a;
+    --surface-overlay: #161628;
+    --surface-card: #111122;
+    --neon-blue: #00d4ff;
+    --neon-pink: #ff2d95;
+    --neon-green: #39ff14;
+    --neon-yellow: #ffd600;
+    --neon-purple: #bf5af2;
+    --text-primary: #e8e8f0;
+    --text-muted: #5c5c80;
+    --text-dim: #3a3a55;
+    --danger: #ff4444;
+    --safe: #39ff14;
+    --gold: #ffb700;
+    --glow-blue: rgba(0, 212, 255, 0.15);
+    --glow-pink: rgba(255, 45, 149, 0.12);
+    --glow-green: rgba(57, 255, 20, 0.12);
+    --border-subtle: rgba(255,255,255,0.04);
+    --border-medium: rgba(255,255,255,0.08);
+    --font-display: "Syne", system-ui, sans-serif;
+    --font-body: "Space Grotesk", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--surface);
+    color: var(--text-primary);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── Global Background ── */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% -10%, rgba(0, 212, 255, 0.06), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 100%, rgba(191, 90, 242, 0.04), transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Scanlines */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.06) 2px,
+      rgba(0, 0, 0, 0.06) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Layout ── */
+  .app {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 24px 20px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Screens ── */
+  .screen { display: none; flex-direction: column; flex: 1; }
+  .screen.active { display: flex; }
+
+  /* ── Shared: Glowing borders ── */
+  .glow-border {
+    position: relative;
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+  }
+  .glow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 16px;
+    background: linear-gradient(135deg,
+      rgba(0, 212, 255, 0.2),
+      rgba(191, 90, 242, 0.1),
+      rgba(255, 45, 149, 0.15)
+    );
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    padding: 1px;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  AUTH SCREEN                                   */
+  /* ═══════════════════════════════════════════════ */
+  .auth-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 80px;
+  }
+
+  .auth-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 100px;
+    background: rgba(0, 212, 255, 0.06);
+    border: 1px solid rgba(0, 212, 255, 0.15);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--neon-blue);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 28px;
+    animation: fadeIn 0.6s ease-out 0.1s both;
+  }
+  .auth-badge .dot {
+    width: 6px;
+    height: 6px;
+    background: var(--neon-blue);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .auth-title {
+    font-family: var(--font-display);
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 10px;
+    text-align: center;
+    animation: fadeIn 0.6s ease-out 0.2s both;
+  }
+  .auth-title .gradient {
+    background: linear-gradient(135deg, var(--neon-blue) 0%, var(--neon-purple) 50%, var(--neon-pink) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .auth-subtitle {
+    color: var(--text-muted);
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: 44px;
+    font-weight: 400;
+    animation: fadeIn 0.6s ease-out 0.35s both;
+  }
+
+  .auth-card {
+    width: 100%;
+    max-width: 440px;
+    background: var(--surface-raised);
+    border-radius: 20px;
+    padding: 32px 28px;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    overflow: hidden;
+    animation: slideUp 0.5s ease-out 0.4s both;
+  }
+  .auth-card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 20px;
+    background: linear-gradient(160deg,
+      rgba(0, 212, 255, 0.15) 0%,
+      transparent 40%,
+      transparent 60%,
+      rgba(255, 45, 149, 0.1) 100%
+    );
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    padding: 1px;
+    pointer-events: none;
+  }
+  /* Noise texture inside card */
+  .auth-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    border-radius: 20px;
+  }
+
+  .input-group {
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 1;
+  }
+  .input-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+  }
+  .input-wrapper {
+    position: relative;
+  }
+  .input-wrapper .icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    font-size: 14px;
+    pointer-events: none;
+    transition: color 0.2s;
+  }
+  .input-field {
+    width: 100%;
+    padding: 14px 16px 14px 40px;
+    background: var(--surface);
+    border: 1px solid var(--border-medium);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 400;
+    outline: none;
+    transition: all 0.25s ease;
+  }
+  .input-field::placeholder {
+    color: var(--text-dim);
+  }
+  .input-field:focus {
+    border-color: rgba(0, 212, 255, 0.4);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.08), inset 0 0 20px rgba(0, 212, 255, 0.03);
+  }
+  .input-field:focus + .focus-ring {
+    opacity: 1;
+  }
+  .input-field:focus ~ .icon {
+    color: var(--neon-blue);
+  }
+
+  .remember-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 1;
+  }
+  .checkbox-custom {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1.5px solid var(--text-dim);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .checkbox-custom.checked {
+    background: var(--neon-blue);
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+  }
+  .checkbox-custom svg {
+    width: 11px;
+    height: 11px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .checkbox-custom.checked svg {
+    opacity: 1;
+  }
+  .remember-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .remember-row input[type="checkbox"] {
+    display: none;
+  }
+
+  .auth-error {
+    min-height: 20px;
+    margin-bottom: 8px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+  .auth-error-text {
+    color: var(--danger);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 8px 12px;
+    background: rgba(255, 68, 68, 0.06);
+    border: 1px solid rgba(255, 68, 68, 0.15);
+    border-radius: 8px;
+    display: none;
+  }
+  .auth-error-text.visible {
+    display: block;
+    animation: shake 0.4s ease-out;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 14px 24px;
+    border: none;
+    border-radius: 12px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.5px;
+    position: relative;
+    z-index: 1;
+  }
+  .btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--neon-blue), #0090cc);
+    color: var(--surface);
+    font-weight: 700;
+    width: 100%;
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 4px 24px rgba(0, 212, 255, 0.35), 0 0 60px rgba(0, 212, 255, 0.1);
+    transform: translateY(-1px);
+  }
+  .btn-primary .spinner {
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(6, 6, 12, 0.3);
+    border-top-color: var(--surface);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin: 0 auto;
+  }
+  .btn-primary.loading .btn-text { display: none; }
+  .btn-primary.loading .spinner { display: block; }
+
+  .btn-danger {
+    background: linear-gradient(135deg, var(--danger), #cc2222);
+    color: white;
+  }
+  .btn-danger:hover:not(:disabled) {
+    box-shadow: 0 4px 24px rgba(255, 68, 68, 0.3);
+    transform: translateY(-1px);
+  }
+
+  .btn-safe {
+    background: linear-gradient(135deg, var(--safe), #20cc0e);
+    color: var(--surface);
+    font-weight: 700;
+  }
+  .btn-safe:hover:not(:disabled) {
+    box-shadow: 0 4px 24px rgba(57, 255, 20, 0.3);
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    background: var(--surface-overlay);
+    color: var(--text-muted);
+    border: 1px solid var(--border-medium);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(255,255,255,0.04);
+    color: var(--text-primary);
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  .btn-skip {
+    background: var(--surface-overlay);
+    color: var(--text-muted);
+    border: 1px solid var(--border-medium);
+  }
+  .btn-skip:hover:not(:disabled) {
+    background: rgba(255,255,255,0.04);
+    color: var(--text-primary);
+    border-color: rgba(255,255,255,0.15);
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  LOADING SCREEN                                */
+  /* ═══════════════════════════════════════════════ */
+  .loading-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+  }
+
+  .loading-orb {
+    width: 56px;
+    height: 56px;
+    position: relative;
+  }
+  .loading-orb .ring {
+    position: absolute;
+    inset: 0;
+    border: 2px solid transparent;
+    border-top-color: var(--neon-blue);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  .loading-orb .ring:nth-child(2) {
+    inset: 6px;
+    border-top-color: var(--neon-purple);
+    animation-duration: 1.4s;
+    animation-direction: reverse;
+  }
+  .loading-orb .ring:nth-child(3) {
+    inset: 12px;
+    border-top-color: var(--neon-pink);
+    animation-duration: 2s;
+  }
+  .loading-orb .core {
+    position: absolute;
+    inset: 18px;
+    background: radial-gradient(circle, var(--neon-blue), transparent);
+    border-radius: 50%;
+    opacity: 0.3;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .loading-info {
+    text-align: center;
+  }
+  .loading-label {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .loading-detail {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .progress-track {
+    width: 100%;
+    max-width: 320px;
+    height: 4px;
+    background: var(--surface-overlay);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-track::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+    animation: shimmer 2s infinite;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple), var(--neon-pink));
+    border-radius: 2px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.4);
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  REVIEW SCREEN                                 */
+  /* ═══════════════════════════════════════════════ */
+  .review-header {
+    background: var(--surface-raised);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    overflow: hidden;
+  }
+  .review-header::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
+  }
+
+  .progress-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .progress-counter {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .progress-counter strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .progress-stats {
+    display: flex;
+    gap: 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .stat-kept { color: var(--safe); }
+  .stat-deleted { color: var(--danger); }
+  .stat-skipped { color: var(--text-dim); }
+
+  .review-progress-bar {
+    width: 100%;
+    height: 3px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .review-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+    border-radius: 2px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+  }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex;
+    gap: 2px;
+    background: var(--surface-raised);
+    border-radius: 10px;
+    padding: 3px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-subtle);
+  }
+  .tab-bar button {
+    flex: 1;
+    padding: 9px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab-bar button.active {
+    background: var(--surface-overlay);
+    color: var(--text-primary);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .tab-bar button:hover:not(.active) {
+    color: var(--text-muted);
+  }
+
+  /* Review Card */
+  .card-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 1200px;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .review-card {
+    width: 100%;
+    background: var(--surface-card);
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s;
+    position: relative;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 1px rgba(255,255,255,0.05);
+  }
+  .review-card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 20px;
+    background: linear-gradient(160deg,
+      rgba(0, 212, 255, 0.12) 0%,
+      transparent 30%,
+      transparent 70%,
+      rgba(191, 90, 242, 0.08) 100%
+    );
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    padding: 1px;
+    pointer-events: none;
+  }
+
+  .review-card.slide-left {
+    transform: translateX(-130%) rotate(-18deg);
+    opacity: 0;
+  }
+  .review-card.slide-right {
+    transform: translateX(130%) rotate(18deg);
+    opacity: 0;
+  }
+  .review-card.slide-down {
+    transform: translateY(130%) scale(0.9);
+    opacity: 0;
+  }
+  .review-card.entering {
+    animation: cardEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  @keyframes cardEnter {
+    from { transform: scale(0.92) translateY(16px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+  }
+
+  /* Decision stamp overlays */
+  .card-decision-overlay {
+    position: absolute;
+    top: 24px;
+    font-family: var(--font-display);
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    padding: 6px 18px;
+    border-radius: 6px;
+    border: 3px solid;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.15s;
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+  .card-decision-overlay.keep-label {
+    right: 20px;
+    color: var(--safe);
+    border-color: var(--safe);
+    transform: rotate(12deg) scale(0.85);
+    text-shadow: 0 0 20px rgba(57, 255, 20, 0.4);
+  }
+  .card-decision-overlay.delete-label {
+    left: 20px;
+    color: var(--danger);
+    border-color: var(--danger);
+    transform: rotate(-12deg) scale(0.85);
+    text-shadow: 0 0 20px rgba(255, 68, 68, 0.4);
+  }
+  .card-decision-overlay.visible {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+
+  .card-image-wrapper {
+    width: 100%;
+    max-height: 50vh;
+    overflow: hidden;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .card-image-wrapper::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(transparent, var(--surface-card));
+    pointer-events: none;
+  }
+  .card-image-wrapper img {
+    width: 100%;
+    height: auto;
+    max-height: 50vh;
+    object-fit: contain;
+    display: block;
+  }
+  .no-image {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: var(--font-mono);
+  }
+  .no-image::before {
+    content: "";
+    display: block;
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 12px;
+    border: 2px dashed var(--text-dim);
+    border-radius: 8px;
+    opacity: 0.4;
+  }
+
+  .card-info {
+    padding: 18px 20px 16px;
+    position: relative;
+  }
+  .card-meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .meta-pill.score {
+    background: rgba(255, 214, 0, 0.08);
+    color: var(--neon-yellow);
+    border: 1px solid rgba(255, 214, 0, 0.15);
+  }
+  .meta-pill.name {
+    background: rgba(0, 212, 255, 0.06);
+    color: var(--neon-blue);
+    border: 1px solid rgba(0, 212, 255, 0.12);
+  }
+
+  .card-matched {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--neon-pink);
+    margin-bottom: 10px;
+    padding: 4px 10px;
+    background: rgba(255, 45, 149, 0.06);
+    border-radius: 6px;
+    display: inline-block;
+    border: 1px solid rgba(255, 45, 149, 0.1);
+  }
+  .card-matched:empty {
+    display: none;
+  }
+
+  .card-title {
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 14px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-weight: 400;
+  }
+  .card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    transition: color 0.2s;
+    padding: 4px 0;
+  }
+  .card-link:hover {
+    color: var(--neon-blue);
+  }
+  .card-link svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* Action Buttons Row */
+  .actions {
+    display: flex;
+    gap: 10px;
+    padding: 16px 0 6px;
+  }
+  .actions .btn {
+    flex: 1;
+    text-align: center;
+    font-size: 13px;
+    padding: 15px 8px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .actions .btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .shortcuts {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    padding: 4px 0 8px;
+    letter-spacing: 0.5px;
+  }
+  .shortcuts kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    background: var(--surface-overlay);
+    border-radius: 3px;
+    border: 1px solid var(--border-subtle);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    margin: 0 1px;
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  INSIGHTS                                      */
+  /* ═══════════════════════════════════════════════ */
+  .insights-header {
+    text-align: center;
+    padding: 16px 0 20px;
+  }
+  .insights-header h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .insights-header p {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .rule-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .rule-card:hover {
+    border-color: var(--border-medium);
+    background: rgba(255,255,255,0.02);
+  }
+  .rule-card.selected {
+    border-color: rgba(255, 45, 149, 0.3);
+    background: rgba(255, 45, 149, 0.04);
+  }
+  .rule-checkbox {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1.5px solid var(--text-dim);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .rule-card.selected .rule-checkbox {
+    background: var(--neon-pink);
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 8px rgba(255, 45, 149, 0.3);
+  }
+  .rule-checkbox svg {
+    width: 11px;
+    height: 11px;
+    opacity: 0;
+  }
+  .rule-card.selected .rule-checkbox svg {
+    opacity: 1;
+  }
+  .rule-details {
+    flex: 1;
+    min-width: 0;
+  }
+  .rule-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  .rule-stats {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .rule-match-count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--neon-yellow);
+    font-weight: 600;
+    flex-shrink: 0;
+    padding: 3px 8px;
+    background: rgba(255, 214, 0, 0.06);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 214, 0, 0.1);
+  }
+
+  .insights-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    margin-bottom: 16px;
+  }
+  .insights-actions .btn { flex: 1; font-size: 12px; }
+
+  .bulk-preview {
+    background: var(--surface-raised);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-subtle);
+  }
+  .bulk-preview h4 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .preview-item {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 12px;
+  }
+  .preview-item:last-child { border-bottom: none; }
+  .preview-item .title { color: var(--text-primary); }
+  .preview-item .meta {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    margin-top: 3px;
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  DONE SCREEN                                   */
+  /* ═══════════════════════════════════════════════ */
+  .done-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 28px;
+  }
+  .done-check {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(57, 255, 20, 0.1), rgba(57, 255, 20, 0.02));
+    border: 2px solid rgba(57, 255, 20, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: doneReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 0 40px rgba(57, 255, 20, 0.1);
+  }
+  .done-check svg {
+    width: 32px;
+    height: 32px;
+    color: var(--safe);
+  }
+  @keyframes doneReveal {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .done-content h2 {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 700;
+  }
+  .done-stats {
+    display: flex;
+    gap: 32px;
+  }
+  .done-stat-value {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 700;
+  }
+  .done-stat-label {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-top: 4px;
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  DIALOG                                        */
+  /* ═══════════════════════════════════════════════ */
+  .dialog-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .dialog-overlay.active { display: flex; }
+  .dialog {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-medium);
+    border-radius: 20px;
+    padding: 28px;
+    max-width: 400px;
+    width: 100%;
+    animation: dialogEnter 0.25s ease-out;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  }
+  @keyframes dialogEnter {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .dialog h3 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    margin-bottom: 12px;
+    color: var(--danger);
+  }
+  .dialog p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    line-height: 1.7;
+  }
+  .dialog-actions {
+    display: flex;
+    gap: 10px;
+  }
+  .dialog-actions .btn { flex: 1; }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  NOTIFICATION                                  */
+  /* ═══════════════════════════════════════════════ */
+  .notification {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-medium);
+    border-radius: 12px;
+    padding: 12px 20px;
+    font-size: 13px;
+    z-index: 200;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    backdrop-filter: blur(16px);
+  }
+  .notification.visible {
+    transform: translateX(-50%) translateY(0);
+  }
+  .notification.success {
+    border-color: rgba(57, 255, 20, 0.3);
+    color: var(--safe);
+  }
+  .notification.error {
+    border-color: rgba(255, 68, 68, 0.3);
+    color: var(--danger);
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /*  UTILITIES & ANIMATIONS                        */
+  /* ═══════════════════════════════════════════════ */
+  .hidden { display: none !important; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* Mobile tweaks */
+  @media (max-width: 480px) {
+    .auth-title { font-size: 34px; }
+    .auth-card { padding: 24px 20px; }
+    .actions .btn { font-size: 12px; padding: 13px 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ AUTH SCREEN ═══ -->
+  <div id="screen-auth" class="screen active">
+    <div class="auth-screen">
+      <div class="auth-badge">
+        <span class="dot"></span>
+        Moderation Terminal
+      </div>
+      <h1 class="auth-title"><span class="gradient">Content Review</span></h1>
+      <p class="auth-subtitle">Swipe through flagged posts. Keep or kill.</p>
+
+      <div class="auth-card">
+        <div class="input-group">
+          <label class="input-label">Service Key</label>
+          <div class="input-wrapper">
+            <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" class="input-field" id="input-key" placeholder="eyJhbGciOiJIUzI1NiI..." autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="remember-row" onclick="toggleRemember()">
+          <div class="checkbox-custom" id="checkbox-visual">
+            <svg viewBox="0 0 12 12" fill="none" stroke="#06060c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6L5 8.5L9.5 3.5"/></svg>
+          </div>
+          <span class="remember-label">Remember key across sessions</span>
+          <input type="checkbox" id="input-remember" />
+        </div>
+
+        <div class="auth-error" id="auth-error">
+          <div class="auth-error-text" id="auth-error-text"></div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-connect" onclick="handleConnect()">
+          <span class="btn-text">Authenticate</span>
+          <div class="spinner"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LOADING SCREEN ═══ -->
+  <div id="screen-loading" class="screen">
+    <div class="loading-content">
+      <div class="loading-orb">
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="core"></div>
+      </div>
+      <div class="loading-info">
+        <div class="loading-label" id="loading-text">Scanning for flagged content</div>
+        <div class="loading-detail" id="loading-detail">Initializing...</div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="loading-progress"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ REVIEW SCREEN ═══ -->
+  <div id="screen-review" class="screen">
+    <div class="review-header">
+      <div class="progress-top">
+        <span class="progress-counter"><strong id="review-current">0</strong> / <span id="review-total">0</span></span>
+        <div class="progress-stats">
+          <span class="stat-kept">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+            <strong id="stat-kept">0</strong>
+          </span>
+          <span class="stat-deleted">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            <strong id="stat-deleted">0</strong>
+          </span>
+          <span class="stat-skipped">
+            <strong id="stat-skipped">0</strong> skip
+          </span>
+        </div>
+      </div>
+      <div class="review-progress-bar">
+        <div class="review-progress-fill" id="review-progress-fill"></div>
+      </div>
+    </div>
+
+    <div class="tab-bar" id="tab-bar" style="display:none">
+      <button class="active" onclick="switchTab('review')">Review</button>
+      <button onclick="switchTab('insights')">Insights</button>
+    </div>
+
+    <div id="tab-review">
+      <div class="card-container">
+        <div class="review-card" id="review-card">
+          <span class="card-decision-overlay keep-label" id="label-keep">Keep</span>
+          <span class="card-decision-overlay delete-label" id="label-delete">Hide</span>
+          <div class="card-image-wrapper" id="card-image-wrapper">
+            <div class="no-image">No image</div>
+          </div>
+          <div class="card-info">
+            <div class="card-meta">
+              <span class="meta-pill score" id="card-score"></span>
+              <span class="meta-pill name" id="card-name"></span>
+            </div>
+            <div class="card-matched" id="card-matched"></div>
+            <div class="card-title" id="card-title"></div>
+            <a class="card-link" id="card-link" href="#" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Open on Reddit
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-danger" onclick="decide('delete')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Hide
+        </button>
+        <button class="btn btn-skip" onclick="decide('skip')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          Skip
+        </button>
+        <button class="btn btn-safe" onclick="decide('keep')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Keep
+        </button>
+      </div>
+      <div class="shortcuts"><kbd>D</kbd> Hide <kbd>S</kbd> Skip <kbd>K</kbd> Keep <kbd>U</kbd> Undo</div>
+    </div>
+
+    <!-- Insights tab -->
+    <div id="tab-insights" class="hidden">
+      <div class="insights-header">
+        <h2>Pattern Insights</h2>
+        <p>Suggested bulk rules based on your decisions</p>
+      </div>
+      <div id="rules-list"></div>
+      <div id="bulk-preview-container" class="hidden"></div>
+      <div class="insights-actions">
+        <button class="btn btn-ghost" onclick="previewBulk()">Preview Selected</button>
+        <button class="btn btn-danger" id="btn-apply-bulk" onclick="confirmBulk()">Apply Bulk Hide</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ DONE SCREEN ═══ -->
+  <div id="screen-done" class="screen">
+    <div class="done-content">
+      <div class="done-check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h2>Review Complete</h2>
+      <div class="done-stats">
+        <div>
+          <div class="done-stat-value stat-kept" id="done-kept">0</div>
+          <div class="done-stat-label">Kept</div>
+        </div>
+        <div>
+          <div class="done-stat-value stat-deleted" id="done-deleted">0</div>
+          <div class="done-stat-label">Hidden</div>
+        </div>
+        <div>
+          <div class="done-stat-value stat-skipped" id="done-skipped">0</div>
+          <div class="done-stat-label">Skipped</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="restartReview()" style="max-width:240px">Review Again</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Confirm Dialog -->
+<div class="dialog-overlay" id="dialog-overlay">
+  <div class="dialog">
+    <h3 id="dialog-title">Confirm</h3>
+    <p id="dialog-message"></p>
+    <div id="dialog-progress" class="hidden">
+      <div class="progress-track" style="max-width:100%">
+        <div class="progress-fill" id="dialog-progress-fill"></div>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-top:10px;text-align:center" id="dialog-progress-text"></div>
+    </div>
+    <div class="dialog-actions" id="dialog-actions">
+      <button class="btn btn-ghost" onclick="closeDialog()">Cancel</button>
+      <button class="btn btn-danger" id="btn-dialog-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification Toast -->
+<div class="notification" id="notification"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════
+const SUPABASE_URL = 'https://bnpdkhivrgtdayxqzihv.supabase.co';
+const SENSITIVE_PATTERNS = [
+  'firearm', 'gun', 'shooting', 'weapon',
+  'protest', 'rally',
+  'political', 'politics',
+  'democrat', 'republican', 'conservative', 'liberal',
+  'trump', 'biden', 'obama', 'maga',
+  'immigration', 'immigrant', 'deportation',
+  'abortion', 'pro-life', 'pro-choice',
+  'vaccine', 'antivax', 'covid hoax',
+  'racist', 'racism', 'white supremac', 'nazi',
+  'terrorist', 'terrorism',
+  'Alex Pretti',
+];
+const UNDO_STACK_SIZE = 20;
+const INSIGHTS_THRESHOLD = 100;
+const BULK_CONCURRENCY = 5;
+const STORAGE_KEY = 'amiin-review-state';
+
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let supabaseKey = '';
+let allPosts = [];
+let currentIndex = 0;
+let decisions = {};
+let undoStack = [];
+let stats = { kept: 0, deleted: 0, skipped: 0 };
+let insightsShown = false;
+let preloadedImage = null;
+let isAnimating = false;
+
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+function $(id) { return document.getElementById(id); }
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('screen-' + name).classList.add('active');
+}
+
+function notify(msg, type = 'success') {
+  const el = $('notification');
+  el.textContent = msg;
+  el.className = 'notification ' + type;
+  requestAnimationFrame(() => el.classList.add('visible'));
+  setTimeout(() => el.classList.remove('visible'), 2500);
+}
+
+async function supabaseFetch(path, opts = {}) {
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    ...opts,
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+    },
+  });
+  return res;
+}
+
+function saveState() {
+  const state = { decisions, currentIndex, stats };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function clearState() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function matchedPatterns(post) {
+  const text = ((post.title || '') + ' ' + (post.extracted_name || '')).toLowerCase();
+  return SENSITIVE_PATTERNS.filter(p => text.includes(p.toLowerCase()));
+}
+
+function toggleRemember() {
+  const cb = $('input-remember');
+  cb.checked = !cb.checked;
+  const visual = $('checkbox-visual');
+  visual.classList.toggle('checked', cb.checked);
+}
+
+// ═══════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════
+(function initAuth() {
+  const stored = localStorage.getItem('amiin-review-key') || sessionStorage.getItem('amiin-review-key');
+  if (stored) {
+    $('input-key').value = stored;
+    if (localStorage.getItem('amiin-review-key')) {
+      $('input-remember').checked = true;
+      $('checkbox-visual').classList.add('checked');
+    }
+  }
+  $('input-key').addEventListener('keydown', e => { if (e.key === 'Enter') handleConnect(); });
+})();
+
+async function handleConnect() {
+  const key = $('input-key').value.trim();
+  if (!key) {
+    showAuthError('Enter a Supabase service key to continue');
+    return;
+  }
+
+  const btn = $('btn-connect');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  hideAuthError();
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/reddit_posts?limit=1&select=id`, {
+      headers: { 'apikey': key, 'Authorization': `Bearer ${key}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} \u2014 check that this is a service_role key`);
+
+    supabaseKey = key;
+
+    if ($('input-remember').checked) {
+      localStorage.setItem('amiin-review-key', key);
+      sessionStorage.removeItem('amiin-review-key');
+    } else {
+      sessionStorage.setItem('amiin-review-key', key);
+      localStorage.removeItem('amiin-review-key');
+    }
+
+    startLoading();
+  } catch (err) {
+    showAuthError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+function showAuthError(msg) {
+  const el = $('auth-error-text');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+function hideAuthError() {
+  $('auth-error-text').classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════════
+//  LOADING
+// ═══════════════════════════════════════════════
+async function startLoading() {
+  showScreen('loading');
+  const seenIds = new Set();
+  const posts = [];
+  const totalQueries = SENSITIVE_PATTERNS.length * 2;
+  let completed = 0;
+
+  for (const pattern of SENSITIVE_PATTERNS) {
+    const encoded = encodeURIComponent(`%${pattern}%`);
+
+    // Title search (exclude already-hidden posts)
+    try {
+      const res = await supabaseFetch(
+        `/rest/v1/reddit_posts?title=ilike.${encoded}&hidden=not.eq.true&select=id,title,url,extracted_name,extracted_headline,score,image_url,created_utc&order=score.desc&limit=50`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        for (const p of data) {
+          if (!seenIds.has(p.id)) { seenIds.add(p.id); posts.push(p); }
+        }
+      }
+    } catch {}
+    completed++;
+    updateLoadingProgress(completed, totalQueries, posts.length, pattern);
+
+    // Name search (exclude already-hidden posts)
+    try {
+      const res = await supabaseFetch(
+        `/rest/v1/reddit_posts?extracted_name=ilike.${encoded}&hidden=not.eq.true&select=id,title,url,extracted_name,extracted_headline,score,image_url,created_utc&order=score.desc&limit=50`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        for (const p of data) {
+          if (!seenIds.has(p.id)) { seenIds.add(p.id); posts.push(p); }
+        }
+      }
+    } catch {}
+    completed++;
+    updateLoadingProgress(completed, totalQueries, posts.length, pattern);
+  }
+
+  posts.sort((a, b) => b.score - a.score);
+  allPosts = posts;
+
+  const saved = loadState();
+  if (saved && saved.decisions && Object.keys(saved.decisions).length > 0) {
+    decisions = saved.decisions;
+    stats = saved.stats || { kept: 0, deleted: 0, skipped: 0 };
+    currentIndex = allPosts.findIndex(p => !decisions[p.id]);
+    if (currentIndex === -1) currentIndex = allPosts.length;
+    notify(`Restored ${Object.keys(decisions).length} previous reviews`);
+  }
+
+  if (allPosts.length === 0) {
+    $('loading-text').textContent = 'No flagged posts found';
+    $('loading-detail').textContent = 'All clear!';
+    return;
+  }
+
+  startReview();
+}
+
+function updateLoadingProgress(completed, total, found, pattern) {
+  const pct = Math.round((completed / total) * 100);
+  $('loading-progress').style.width = pct + '%';
+  $('loading-text').textContent = 'Scanning for flagged content';
+  $('loading-detail').textContent = `${completed}/${total} patterns \u00B7 ${found} posts found \u00B7 "${pattern}"`;
+}
+
+// ═══════════════════════════════════════════════
+//  REVIEW
+// ═══════════════════════════════════════════════
+function startReview() {
+  showScreen('review');
+  $('review-total').textContent = allPosts.length;
+  updateReviewUI();
+  renderCurrentCard();
+}
+
+function updateReviewUI() {
+  const reviewed = stats.kept + stats.deleted + stats.skipped;
+  $('review-current').textContent = Math.min(reviewed + 1, allPosts.length);
+  $('stat-kept').textContent = stats.kept;
+  $('stat-deleted').textContent = stats.deleted;
+  $('stat-skipped').textContent = stats.skipped;
+  const pct = allPosts.length > 0 ? (reviewed / allPosts.length) * 100 : 0;
+  $('review-progress-fill').style.width = pct + '%';
+
+  const total = stats.kept + stats.deleted + stats.skipped;
+  if (total >= INSIGHTS_THRESHOLD && !insightsShown) {
+    insightsShown = true;
+    $('tab-bar').style.display = 'flex';
+    notify(`${INSIGHTS_THRESHOLD} reviews done! Check Insights tab for patterns.`);
+    generateInsights();
+  }
+}
+
+function findNextUnreviewed() {
+  for (let i = currentIndex; i < allPosts.length; i++) {
+    if (!decisions[allPosts[i].id]) return i;
+  }
+  for (let i = 0; i < currentIndex; i++) {
+    if (!decisions[allPosts[i].id]) return i;
+  }
+  return -1;
+}
+
+function renderCurrentCard() {
+  const idx = findNextUnreviewed();
+  if (idx === -1) { showDone(); return; }
+  currentIndex = idx;
+  const post = allPosts[currentIndex];
+  const card = $('review-card');
+
+  $('card-score').textContent = `\u2B06 ${post.score?.toLocaleString() ?? '?'}`;
+  $('card-name').textContent = post.extracted_name || '(no name)';
+
+  const matched = matchedPatterns(post);
+  $('card-matched').textContent = matched.length > 0 ? `Matched: ${matched.join(', ')}` : '';
+
+  $('card-title').textContent = post.title || '(untitled)';
+
+  const url = post.url?.startsWith('http') ? post.url : `https://reddit.com${post.url}`;
+  $('card-link').href = url;
+
+  const wrapper = $('card-image-wrapper');
+  if (post.image_url) {
+    wrapper.innerHTML = `<img src="${escapeHtml(post.image_url)}" alt="Post image" loading="eager" onerror="this.parentElement.innerHTML='<div class=\\'no-image\\'>Image failed to load</div>'" />`;
+  } else {
+    wrapper.innerHTML = '<div class="no-image">No image available</div>';
+  }
+
+  card.classList.remove('slide-left', 'slide-right', 'slide-down', 'entering');
+  requestAnimationFrame(() => card.classList.add('entering'));
+  preloadNext(currentIndex);
+}
+
+function preloadNext(fromIdx) {
+  for (let i = fromIdx + 1; i < allPosts.length; i++) {
+    if (!decisions[allPosts[i].id] && allPosts[i].image_url) {
+      preloadedImage = new Image();
+      preloadedImage.src = allPosts[i].image_url;
+      break;
+    }
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function decide(action) {
+  if (isAnimating) return;
+  const idx = findNextUnreviewed();
+  if (idx === -1) return;
+
+  const post = allPosts[idx];
+  isAnimating = true;
+
+  const card = $('review-card');
+  const keepLabel = $('label-keep');
+  const deleteLabel = $('label-delete');
+
+  if (action === 'keep') {
+    keepLabel.classList.add('visible');
+    card.classList.add('slide-right');
+  } else if (action === 'delete') {
+    deleteLabel.classList.add('visible');
+    card.classList.add('slide-left');
+  } else {
+    card.classList.add('slide-down');
+  }
+
+  decisions[post.id] = action;
+  stats[action === 'keep' ? 'kept' : action === 'delete' ? 'deleted' : 'skipped']++;
+
+  undoStack.push({ postId: post.id, action, postData: { ...post } });
+  if (undoStack.length > UNDO_STACK_SIZE) undoStack.shift();
+
+  saveState();
+
+  if (action === 'delete') {
+    try {
+      await supabaseFetch(`/rest/v1/reddit_posts?id=eq.${post.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hidden: true }),
+      });
+    } catch (err) {
+      notify(`Hide failed: ${err.message}`, 'error');
+    }
+  }
+
+  setTimeout(() => {
+    keepLabel.classList.remove('visible');
+    deleteLabel.classList.remove('visible');
+    card.classList.remove('slide-left', 'slide-right', 'slide-down');
+    isAnimating = false;
+    updateReviewUI();
+    renderCurrentCard();
+  }, 350);
+}
+
+async function undo() {
+  if (undoStack.length === 0) { notify('Nothing to undo', 'error'); return; }
+
+  const last = undoStack.pop();
+  delete decisions[last.postId];
+
+  if (last.action === 'keep') stats.kept--;
+  else if (last.action === 'delete') stats.deleted--;
+  else stats.skipped--;
+
+  if (last.action === 'delete') {
+    try {
+      await supabaseFetch(`/rest/v1/reddit_posts?id=eq.${last.postData.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hidden: false }),
+      });
+      notify('Unhidden post');
+    } catch (err) {
+      notify(`Restore failed: ${err.message}`, 'error');
+    }
+  } else {
+    notify('Undone');
+  }
+
+  const restoredIdx = allPosts.findIndex(p => p.id === last.postId);
+  if (restoredIdx !== -1) currentIndex = restoredIdx;
+
+  saveState();
+  updateReviewUI();
+  renderCurrentCard();
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (!$('screen-review').classList.contains('active')) return;
+  if ($('dialog-overlay').classList.contains('active')) return;
+  if ($('tab-insights') && !$('tab-insights').classList.contains('hidden')) return;
+
+  switch (e.key) {
+    case 'ArrowRight': case 'k': case 'K':
+      e.preventDefault(); decide('keep'); break;
+    case 'ArrowLeft': case 'd': case 'D':
+      e.preventDefault(); decide('delete'); break;
+    case 'ArrowDown': case 's': case 'S':
+      e.preventDefault(); decide('skip'); break;
+    case 'u': case 'U':
+      e.preventDefault(); undo(); break;
+  }
+});
+
+function switchTab(tab) {
+  const btns = $('tab-bar').querySelectorAll('button');
+  btns.forEach(b => b.classList.remove('active'));
+
+  if (tab === 'review') {
+    btns[0].classList.add('active');
+    $('tab-review').classList.remove('hidden');
+    $('tab-insights').classList.add('hidden');
+  } else {
+    btns[1].classList.add('active');
+    $('tab-review').classList.add('hidden');
+    $('tab-insights').classList.remove('hidden');
+    generateInsights();
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  INSIGHTS & PATTERN DETECTION
+// ═══════════════════════════════════════════════
+let bulkRules = [];
+
+function generateInsights() {
+  bulkRules = [];
+  const reviewed = allPosts.filter(p => decisions[p.id]);
+  if (reviewed.length < 10) return;
+
+  for (const pattern of SENSITIVE_PATTERNS) {
+    const matching = reviewed.filter(p => {
+      const text = ((p.title || '') + ' ' + (p.extracted_name || '')).toLowerCase();
+      return text.includes(pattern.toLowerCase());
+    });
+    if (matching.length < 5) continue;
+    const deleteRate = matching.filter(p => decisions[p.id] === 'delete').length / matching.length;
+    if (deleteRate > 0.8) {
+      const unreviewedMatches = allPosts.filter(p => {
+        if (decisions[p.id]) return false;
+        const text = ((p.title || '') + ' ' + (p.extracted_name || '')).toLowerCase();
+        return text.includes(pattern.toLowerCase());
+      });
+      if (unreviewedMatches.length > 0) {
+        bulkRules.push({
+          type: 'keyword', label: `Keyword: "${pattern}"`,
+          description: `${Math.round(deleteRate * 100)}% delete rate across ${matching.length} reviews`,
+          matches: unreviewedMatches, deleteRate,
+        });
+      }
+    }
+  }
+
+  const scoreBuckets = [
+    { label: 'Score 0\u201310', min: 0, max: 10 },
+    { label: 'Score 11\u201350', min: 11, max: 50 },
+    { label: 'Score 51\u2013200', min: 51, max: 200 },
+    { label: 'Score 201\u20131000', min: 201, max: 1000 },
+    { label: 'Score 1000+', min: 1001, max: Infinity },
+  ];
+  for (const bucket of scoreBuckets) {
+    const matching = reviewed.filter(p => p.score >= bucket.min && p.score <= bucket.max);
+    if (matching.length < 5) continue;
+    const deleteRate = matching.filter(p => decisions[p.id] === 'delete').length / matching.length;
+    if (deleteRate > 0.8) {
+      const unreviewedMatches = allPosts.filter(p => {
+        if (decisions[p.id]) return false;
+        return p.score >= bucket.min && p.score <= bucket.max;
+      });
+      if (unreviewedMatches.length > 0) {
+        bulkRules.push({
+          type: 'score', label: bucket.label,
+          description: `${Math.round(deleteRate * 100)}% delete rate across ${matching.length} reviews`,
+          matches: unreviewedMatches, deleteRate,
+        });
+      }
+    }
+  }
+
+  const withName = reviewed.filter(p => p.extracted_name && p.extracted_name.trim());
+  const withoutName = reviewed.filter(p => !p.extracted_name || !p.extracted_name.trim());
+  if (withName.length >= 5 && withoutName.length >= 5) {
+    const nameDeleteRate = withName.filter(p => decisions[p.id] === 'delete').length / withName.length;
+    const noNameDeleteRate = withoutName.filter(p => decisions[p.id] === 'delete').length / withoutName.length;
+    if (noNameDeleteRate - nameDeleteRate > 0.2 && noNameDeleteRate > 0.8) {
+      const unreviewedMatches = allPosts.filter(p => {
+        if (decisions[p.id]) return false;
+        return !p.extracted_name || !p.extracted_name.trim();
+      });
+      if (unreviewedMatches.length > 0) {
+        bulkRules.push({
+          type: 'no-name', label: 'No extracted name',
+          description: `${Math.round(noNameDeleteRate * 100)}% delete rate for nameless posts`,
+          matches: unreviewedMatches, deleteRate: noNameDeleteRate,
+        });
+      }
+    }
+  }
+
+  const deletedTitles = reviewed.filter(p => decisions[p.id] === 'delete').map(p => (p.title || '').toLowerCase());
+  const keptTitles = reviewed.filter(p => decisions[p.id] === 'keep').map(p => (p.title || '').toLowerCase());
+  const ngramCounts = {};
+  for (const title of deletedTitles) {
+    const words = title.split(/\s+/).filter(w => w.length > 2);
+    for (let n = 2; n <= 3; n++) {
+      for (let i = 0; i <= words.length - n; i++) {
+        const gram = words.slice(i, i + n).join(' ');
+        ngramCounts[gram] = (ngramCounts[gram] || { deleted: 0, kept: 0 });
+        ngramCounts[gram].deleted++;
+      }
+    }
+  }
+  for (const title of keptTitles) {
+    const words = title.split(/\s+/).filter(w => w.length > 2);
+    for (let n = 2; n <= 3; n++) {
+      for (let i = 0; i <= words.length - n; i++) {
+        const gram = words.slice(i, i + n).join(' ');
+        if (ngramCounts[gram]) ngramCounts[gram].kept++;
+      }
+    }
+  }
+  for (const [gram, counts] of Object.entries(ngramCounts)) {
+    const total = counts.deleted + counts.kept;
+    if (total < 3) continue;
+    const deleteRate = counts.deleted / total;
+    if (deleteRate > 0.8) {
+      const unreviewedMatches = allPosts.filter(p => {
+        if (decisions[p.id]) return false;
+        return (p.title || '').toLowerCase().includes(gram);
+      });
+      if (unreviewedMatches.length > 0) {
+        bulkRules.push({
+          type: 'ngram', label: `Phrase: "${gram}"`,
+          description: `${Math.round(deleteRate * 100)}% delete rate (${total} samples)`,
+          matches: unreviewedMatches, deleteRate,
+        });
+      }
+    }
+  }
+
+  bulkRules.sort((a, b) => b.matches.length - a.matches.length);
+  renderRules();
+}
+
+function renderRules() {
+  const container = $('rules-list');
+  if (bulkRules.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px 0;font-size:13px">No strong patterns detected yet. Keep reviewing!</div>';
+    return;
+  }
+
+  container.innerHTML = bulkRules.map((rule, i) => `
+    <div class="rule-card ${rule.selected ? 'selected' : ''}" onclick="toggleRule(${i})">
+      <div class="rule-checkbox">
+        <svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6L5 8.5L9.5 3.5"/></svg>
+      </div>
+      <div class="rule-details">
+        <div class="rule-name">${escapeHtml(rule.label)}</div>
+        <div class="rule-stats">${escapeHtml(rule.description)}</div>
+      </div>
+      <div class="rule-match-count">${rule.matches.length}</div>
+    </div>
+  `).join('');
+}
+
+function toggleRule(idx) {
+  bulkRules[idx].selected = !bulkRules[idx].selected;
+  renderRules();
+}
+
+function getSelectedRuleMatches() {
+  const selected = bulkRules.filter(r => r.selected);
+  const postIds = new Set();
+  const posts = [];
+  for (const rule of selected) {
+    for (const post of rule.matches) {
+      if (!postIds.has(post.id) && !decisions[post.id]) { postIds.add(post.id); posts.push(post); }
+    }
+  }
+  return posts;
+}
+
+function previewBulk() {
+  const posts = getSelectedRuleMatches();
+  const container = $('bulk-preview-container');
+  if (posts.length === 0) { container.classList.add('hidden'); notify('No rules selected', 'error'); return; }
+
+  container.classList.remove('hidden');
+  container.innerHTML = `
+    <div class="bulk-preview">
+      <h4>Preview: ${posts.length} posts to delete</h4>
+      ${posts.slice(0, 50).map(p => `
+        <div class="preview-item">
+          <div class="title">${escapeHtml(p.title || '(untitled)')}</div>
+          <div class="meta">Score: ${p.score?.toLocaleString() ?? '?'} \u00B7 ${p.extracted_name || '(no name)'}</div>
+        </div>
+      `).join('')}
+      ${posts.length > 50 ? `<div style="padding:8px 0;color:var(--text-dim);font-size:10px;font-family:var(--font-mono)">...and ${posts.length - 50} more</div>` : ''}
+    </div>
+  `;
+}
+
+function confirmBulk() {
+  const posts = getSelectedRuleMatches();
+  if (posts.length === 0) { notify('No rules selected', 'error'); return; }
+
+  $('dialog-title').textContent = 'Bulk Hide';
+  $('dialog-message').textContent = `This will hide ${posts.length} posts from search and leaderboard. Posts can be restored later by setting hidden=false.`;
+  $('dialog-progress').classList.add('hidden');
+  $('dialog-actions').classList.remove('hidden');
+  $('btn-dialog-confirm').onclick = () => executeBulk(posts);
+  $('dialog-overlay').classList.add('active');
+}
+
+function closeDialog() {
+  $('dialog-overlay').classList.remove('active');
+}
+
+async function executeBulk(posts) {
+  $('dialog-actions').classList.add('hidden');
+  $('dialog-progress').classList.remove('hidden');
+
+  let completed = 0;
+  let failed = 0;
+  const queue = [...posts];
+  const workers = [];
+
+  for (let w = 0; w < BULK_CONCURRENCY; w++) {
+    workers.push((async () => {
+      while (queue.length > 0) {
+        const post = queue.shift();
+        if (!post) break;
+        try {
+          const res = await supabaseFetch(`/rest/v1/reddit_posts?id=eq.${post.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ hidden: true }),
+          });
+          if (res.ok) { decisions[post.id] = 'delete'; stats.deleted++; completed++; }
+          else { failed++; completed++; }
+        } catch { failed++; completed++; }
+        const pct = Math.round((completed / posts.length) * 100);
+        $('dialog-progress-fill').style.width = pct + '%';
+        $('dialog-progress-text').textContent = `${completed}/${posts.length} (${failed} failed)`;
+      }
+    })());
+  }
+
+  await Promise.all(workers);
+  saveState();
+  updateReviewUI();
+  generateInsights();
+
+  $('dialog-progress-text').textContent = `Done! ${completed - failed} hidden, ${failed} failed.`;
+  setTimeout(() => { closeDialog(); notify(`Bulk hidden ${completed - failed} posts`); }, 1500);
+}
+
+// ═══════════════════════════════════════════════
+//  DONE SCREEN
+// ═══════════════════════════════════════════════
+function showDone() {
+  showScreen('done');
+  $('done-kept').textContent = stats.kept;
+  $('done-deleted').textContent = stats.deleted;
+  $('done-skipped').textContent = stats.skipped;
+}
+
+function restartReview() {
+  clearState();
+  decisions = {};
+  stats = { kept: 0, deleted: 0, skipped: 0 };
+  currentIndex = 0;
+  undoStack = [];
+  insightsShown = false;
+  $('tab-bar').style.display = 'none';
+  startLoading();
+}
+</script>
+</body>
+</html>
