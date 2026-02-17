@@ -113,9 +113,32 @@ as $$
   limit page_size;
 $$;
 
--- Optional: schedule daily sync via pg_cron (enable the extension first in Supabase dashboard)
+-- ═══════════════════════════════════════════════
+-- Sync audit log
+-- ═══════════════════════════════════════════════
+
+create table if not exists sync_log (
+  id serial primary key,
+  run_at timestamptz default now(),
+  source text,  -- 'pg_cron', 'github_actions', 'manual'
+  posts_fetched int default 0,
+  posts_upserted int default 0,
+  posts_ocrd int default 0,
+  posts_hidden int default 0,
+  errors text[],
+  duration_ms int
+);
+
+-- ═══════════════════════════════════════════════
+-- pg_cron schedule (enable extension first in Supabase dashboard)
+-- ═══════════════════════════════════════════════
+
+-- After enabling pg_cron and pg_net extensions, run:
 -- select cron.schedule(
---   'sync-reddit-daily',
+--   'daily-sync',
 --   '0 6 * * *',
---   $$select net.http_get('https://<project-ref>.supabase.co/functions/v1/sync-reddit', headers := '{"Authorization": "Bearer <anon-key>"}'::jsonb)$$
+--   $$select net.http_get(
+--     'https://bnpdkhivrgtdayxqzihv.supabase.co/functions/v1/daily-sync',
+--     headers := '{"Authorization": "Bearer <service-role-key>", "x-sync-source": "pg_cron"}'::jsonb
+--   )$$
 -- );
