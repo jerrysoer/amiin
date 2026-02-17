@@ -61,6 +61,7 @@ Deno.serve(async (req: Request) => {
       .select('title, url, score, created_utc, extracted_name')
       .not('extracted_name', 'is', null)
       .neq('extracted_name', '')
+      .not('hidden', 'eq', true)
       .ilike('extracted_name', `%${queryLast}%`)
       .order('score', { ascending: false })
       .limit(50)
@@ -86,6 +87,7 @@ Deno.serve(async (req: Request) => {
       const { data: fallbackData } = await supabase
         .from('reddit_posts')
         .select('title, url, score, created_utc')
+        .not('hidden', 'eq', true)
         .ilike('title', `%${sanitized}%`)
         .order('score', { ascending: false })
         .limit(10)
