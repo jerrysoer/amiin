@@ -5,16 +5,24 @@ import BehaviorGrid from './BehaviorGrid'
 interface InputFormProps {
   onSubmit: (input: UserInput) => void
   onBack: () => void
+  initialName?: string
+  wasFound?: boolean
 }
 
-export default function InputForm({ onSubmit, onBack }: InputFormProps) {
-  const [name, setName] = useState('')
+export default function InputForm({ onSubmit, onBack, initialName = '', wasFound }: InputFormProps) {
+  const [name, setName] = useState(initialName)
   const [headline, setHeadline] = useState('')
   const [selectedBehaviors, setSelectedBehaviors] = useState<string[]>([])
   const nameRef = useRef<HTMLInputElement>(null)
 
+  const headlineRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
-    nameRef.current?.focus()
+    if (initialName) {
+      headlineRef.current?.focus()
+    } else {
+      nameRef.current?.focus()
+    }
   }, [])
 
   const toggleBehavior = (id: string) => {
@@ -51,13 +59,19 @@ export default function InputForm({ onSubmit, onBack }: InputFormProps) {
           className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-2"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          CONFESS YOUR <span className="text-neon-pink">SINS</span>
+          {wasFound
+            ? <>TIME TO <span className="text-danger">OWN IT</span></>
+            : <>CONFESS YOUR <span className="text-neon-pink">SINS</span></>
+          }
         </h1>
         <p
           className="text-text-muted text-xs mb-8"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Be honest. We already know.
+          {wasFound
+            ? "You've been spotted. Let's see how bad it really is."
+            : 'Be honest. We already know.'
+          }
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -94,6 +108,7 @@ export default function InputForm({ onSubmit, onBack }: InputFormProps) {
               <span className="text-text-muted/50 normal-case tracking-normal font-normal">(optional)</span>
             </label>
             <input
+              ref={headlineRef}
               id="headline"
               type="text"
               value={headline}

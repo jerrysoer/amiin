@@ -144,7 +144,7 @@ async function extractNameFromImage(
             },
             {
               type: 'text',
-              text: 'Look at this screenshot from LinkedIn. Extract:\n1. The person\'s full name (the main person being discussed/shown)\n2. Their LinkedIn headline (the text below their name)\n\nReturn ONLY valid JSON: {"name": "...", "headline": "..."}\nIf you can\'t find a name, return {"name": null, "headline": null}',
+              text: 'Look at this LinkedIn screenshot. Extract the name and headline of the POSTER — the person who wrote/shared this post. Their name appears at the TOP of the post, next to the circular profile photo, in a larger/bold font. This is typically in the format "Name · connection · time".\n\nIMPORTANT: Do NOT extract names of people mentioned IN the post content, in shared images, or in the body text. Only the poster\'s name at the top.\n\nReturn ONLY valid JSON: {"name": "...", "headline": "..."}\nIf you cannot identify the poster\'s name, return {"name": null, "headline": null}',
             },
           ],
         },

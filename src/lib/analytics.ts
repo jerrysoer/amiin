@@ -15,6 +15,11 @@ type EventName =
   | 'card-downloaded'
   | 'share-copied'
   | 'try-again'
+  | 'name-searched'
+  | 'search-found'
+  | 'search-not-found'
+  | 'leaderboard-viewed'
+  | 'leaderboard-name-clicked'
 
 export function trackEvent(event: EventName, data?: Record<string, string | number>) {
   try {

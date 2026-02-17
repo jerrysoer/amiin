@@ -10,6 +10,7 @@ interface ResultsPageProps {
   headline: string
   score: ScoreResult
   onReset: () => void
+  onLeaderboard: () => void
 }
 
 function Confetti() {
@@ -44,7 +45,7 @@ function Confetti() {
   )
 }
 
-export default function ResultsPage({ name, headline, score, onReset }: ResultsPageProps) {
+export default function ResultsPage({ name, headline, score, onReset, onLeaderboard }: ResultsPageProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [showCard, setShowCard] = useState(false)
   const mythic = isMythic(score.tier.name)
@@ -180,7 +181,7 @@ export default function ResultsPage({ name, headline, score, onReset }: ResultsP
 
         {/* Actions */}
         <div
-          className="fade-in-up flex flex-col sm:flex-row gap-3 max-w-sm mx-auto"
+          className="fade-in-up flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
           style={{ animationDelay: '700ms' }}
         >
           <button
@@ -204,6 +205,13 @@ export default function ResultsPage({ name, headline, score, onReset }: ResultsP
             style={{ fontFamily: 'var(--font-display)' }}
           >
             Post on X
+          </button>
+          <button
+            onClick={onLeaderboard}
+            className="flex-1 py-3 px-4 bg-gold/10 text-gold font-bold text-sm rounded-xl border-2 border-gold/30 hover:border-gold cursor-pointer transition-colors"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            🏆 Hall of Fame
           </button>
         </div>
 

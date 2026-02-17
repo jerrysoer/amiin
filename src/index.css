@@ -22,6 +22,7 @@
 
   --color-danger: #ff4444;
   --color-safe: #39ff14;
+  --color-gold: #ffb700;
 }
 
 * {
@@ -209,6 +210,62 @@ body {
   transform: translateY(-1px);
 }
 
+/* Search pulse animation */
+@keyframes searchPulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Search spin */
+@keyframes searchSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Search progress bar */
+@keyframes searchProgress {
+  0% { width: 0%; margin-left: 0; }
+  50% { width: 70%; margin-left: 15%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+
+/* Found flash overlay */
+@keyframes foundFlash {
+  0% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+
+/* Leaderboard row staggered entrance */
+.leaderboard-row {
+  animation: fadeInUp 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+/* Subtle holographic border for #1 leaderboard entry */
+.holo-border-subtle {
+  position: relative;
+}
+.holo-border-subtle::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.75rem;
+  background: linear-gradient(
+    135deg,
+    #ffb700, #ff2d95, #00d4ff, #39ff14, #ffb700
+  );
+  background-size: 400% 400%;
+  animation: holographic 4s ease infinite;
+  z-index: -1;
+  opacity: 0.4;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -219,4 +276,12 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--color-text-muted);
   border-radius: 3px;
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

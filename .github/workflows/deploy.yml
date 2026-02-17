@@ -27,6 +27,7 @@ jobs:
       - run: npm run build
         env:
           VITE_SUPABASE_FUNCTION_URL: https://bnpdkhivrgtdayxqzihv.supabase.co/functions/v1/reddit-search
+          VITE_SUPABASE_LEADERBOARD_URL: https://bnpdkhivrgtdayxqzihv.supabase.co/functions/v1/leaderboard
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

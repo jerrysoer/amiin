@@ -7,6 +7,8 @@
  *   npx tsx scripts/local-sync.ts --ocr-only         # skip fetch, just OCR existing posts
  *   npx tsx scripts/local-sync.ts --fetch-only       # fetch 10k posts, skip OCR
  *   npx tsx scripts/local-sync.ts --ocr-all          # OCR all remaining (200/hr rate limit)
+ *   npx tsx scripts/local-sync.ts --reocr-all        # Re-OCR all existing names with fixed prompt
+ *   npx tsx scripts/local-sync.ts --ocr-all --ts-min=X --ts-max=Y  # OCR partition (for parallel workers)
  *
  * Env vars:
  *   SUPABASE_SERVICE_KEY  — Supabase service role JWT
@@ -139,16 +141,16 @@ async function supabaseUpdate(id: string, fields: Record<string, unknown>) {
   }
 }
 
-async function fetchUnOcrdPosts(limit: number): Promise<{ id: string; image_url: string; title: string }[]> {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/reddit_posts?image_url=not.is.null&extracted_name=is.null&order=score.desc&limit=${limit}&select=id,image_url,title`,
-    {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-      },
-    }
-  )
+async function fetchUnOcrdPosts(limit: number, tsMin?: number, tsMax?: number): Promise<{ id: string; image_url: string; title: string }[]> {
+  let query = `${SUPABASE_URL}/rest/v1/reddit_posts?image_url=not.is.null&extracted_name=is.null&order=score.desc&limit=${limit}&select=id,image_url,title`
+  if (tsMin !== undefined) query += `&created_utc=gte.${tsMin}`
+  if (tsMax !== undefined) query += `&created_utc=lt.${tsMax}`
+  const res = await fetch(query, {
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+    },
+  })
   if (!res.ok) throw new Error(`Fetch un-OCRd: ${res.status}`)
   return res.json()
 }
@@ -222,7 +224,7 @@ async function extractNameFromImage(imageUrl: string): Promise<{ name: string | 
           },
           {
             type: 'text',
-            text: 'Look at this screenshot from LinkedIn. Extract:\n1. The person\'s full name (the main person being discussed/shown)\n2. Their LinkedIn headline (the text below their name)\n\nReturn ONLY valid JSON: {"name": "...", "headline": "..."}\nIf you can\'t find a name, return {"name": null, "headline": null}',
+            text: 'Look at this LinkedIn screenshot. Extract the name and headline of the POSTER — the person who wrote/shared this post. Their name appears at the TOP of the post, next to the circular profile photo, in a larger/bold font. This is typically in the format "Name · connection · time".\n\nIMPORTANT: Do NOT extract names of people mentioned IN the post content, in shared images, or in the body text. Only the poster\'s name at the top.\n\nReturn ONLY valid JSON: {"name": "...", "headline": "..."}\nIf you cannot identify the poster\'s name, return {"name": null, "headline": null}',
           },
         ],
       }],
@@ -247,7 +249,48 @@ async function extractNameFromImage(imageUrl: string): Promise<{ name: string | 
   }
 }
 
-async function runOcr(processAll = false) {
+async function nullifyExistingNames(): Promise<number> {
+  // Count how many records will be affected
+  const countRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/reddit_posts?extracted_name=not.is.null&extracted_name=not.eq.&select=id&limit=1`,
+    {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'count=exact',
+      },
+    }
+  )
+  const count = parseInt(countRes.headers.get('content-range')?.split('/')[1] || '0')
+
+  if (count === 0) return 0
+
+  console.log(`  Nullifying ${count} existing extracted names for re-OCR...`)
+
+  // Batch nullify — Supabase PATCH applies to all matching rows
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/reddit_posts?extracted_name=not.is.null&extracted_name=not.eq.`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
+      body: JSON.stringify({ extracted_name: null, extracted_headline: null }),
+    }
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Nullify names failed ${res.status}: ${text}`)
+  }
+
+  console.log(`  Nullified ${count} records. They will be picked up by OCR.`)
+  return count
+}
+
+async function runOcr(processAll = false, tsMin?: number, tsMax?: number) {
   if (!ANTHROPIC_API_KEY) {
     console.log('Skipping OCR — ANTHROPIC_API_KEY not set')
     return
@@ -256,8 +299,11 @@ async function runOcr(processAll = false) {
   const delayMs = processAll ? OCR_RATE_LIMIT_DELAY_MS : 500
   const limit = processAll ? 1000 : OCR_BATCH_SIZE
   const label = processAll ? '(200/hr rate limit)' : '(fast batch)'
+  const rangeLabel = tsMin || tsMax
+    ? ` [ts ${tsMin || '∞'}..${tsMax || '∞'}]`
+    : ''
 
-  console.log(`\nRunning OCR ${label}...`)
+  console.log(`\nRunning OCR ${label}${rangeLabel}...`)
 
   let totalExtracted = 0
   let totalFailed = 0
@@ -265,7 +311,7 @@ async function runOcr(processAll = false) {
 
   // Loop until no more posts need OCR
   while (true) {
-    const posts = await fetchUnOcrdPosts(limit)
+    const posts = await fetchUnOcrdPosts(limit, tsMin, tsMax)
     if (posts.length === 0) break
 
     console.log(`  Fetched ${posts.length} posts needing OCR`)
@@ -443,13 +489,35 @@ async function main() {
   const ocrOnly = process.argv.includes('--ocr-only')
   const ocrAll = process.argv.includes('--ocr-all')
   const fetchOnly = process.argv.includes('--fetch-only')
+  const reocrAll = process.argv.includes('--reocr-all')
+
+  // Parse --ts-min and --ts-max for partitioned OCR
+  const tsMinArg = process.argv.find(a => a.startsWith('--ts-min='))
+  const tsMaxArg = process.argv.find(a => a.startsWith('--ts-max='))
+  const tsMin = tsMinArg ? parseInt(tsMinArg.split('=')[1]) : undefined
+  const tsMax = tsMaxArg ? parseInt(tsMaxArg.split('=')[1]) : undefined
+
+  if (reocrAll) {
+    // Re-OCR mode: nullify existing names, then run OCR on them
+    if (!ANTHROPIC_API_KEY) {
+      console.error('ANTHROPIC_API_KEY required for re-OCR')
+      process.exit(1)
+    }
+    const nullified = await nullifyExistingNames()
+    if (nullified > 0) {
+      await runOcr(true) // process all with rate limiting
+    } else {
+      console.log('No records to re-OCR.')
+    }
+    return
+  }
 
   if (!ocrOnly && !ocrAll) {
     await syncPosts()
   }
 
   if (!fetchOnly) {
-    await runOcr(ocrOnly ? false : ocrAll || false)
+    await runOcr(ocrOnly ? false : ocrAll || false, tsMin, tsMax)
   }
 }
 

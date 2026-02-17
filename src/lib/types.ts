@@ -94,4 +94,19 @@ export interface CardData {
   score: ScoreResult
 }
 
-export type AppStage = 'landing' | 'form' | 'processing' | 'results'
+export type AppStage = 'landing' | 'searching' | 'search-results' | 'form' | 'processing' | 'results' | 'leaderboard'
+
+export interface LeaderboardEntry {
+  name: string
+  post_count: number
+  peak_score: number
+  peak_post_title: string
+  peak_post_url: string
+  latest_post_date: number
+}
+
+export interface LeaderboardResponse {
+  entries: LeaderboardEntry[]
+  totalPeople: number
+  error?: string
+}
